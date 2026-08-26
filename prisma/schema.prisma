@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Admin users (2 admins, identical full-access permissions) ───
+model Admin {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── Customers (simplified account: name + phone + password) ───
+model Customer {
+  id            String        @id @default(cuid())
+  name          String
+  phone         String        @unique
+  passwordHash  String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  orders        Order[]
+  notifications Notification[]
+}
+
+// ─── Categories (general product type, not a brand) ───
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+// ─── Products (color = only variant; price unified across colors) ───
+model Product {
+  id          String     @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  salePrice   Float?
+  images      String     @default("[]") // JSON: string[] of image URLs
+  attributes  String     @default("[]") // JSON: {key, value}[] custom attributes
+  status      String     @default("ACTIVE") // ACTIVE | ARCHIVED
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  skus        Sku[]
+}
+
+// ─── SKU (one per color, or single base SKU for colorless products) ───
+model Sku {
+  id                String                @id @default(cuid())
+  skuCode           String                @unique // auto-generated BR-XXXXXX
+  productId         String
+  product           Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  colorName         String?
+  colorHex          String?
+  isBase            Boolean               @default(false)
+  availableQty      Int                   @default(0)
+  reservedQty       Int                   @default(0)
+  soldQty           Int                   @default(0)
+  lowStockThreshold Int                   @default(3)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  transactions      InventoryTransaction[]
+}
+
+// ─── Immutable inventory movement log ───
+model InventoryTransaction {
+  id            String   @id @default(cuid())
+  skuId         String
+  sku           Sku      @relation(fields: [skuId], references: [id], onDelete: Cascade)
+  type          String // RECEIVE | RESERVE | RELEASE | SALE | ADJUSTMENT
+  quantity      Int // signed
+  balanceBefore Int // available qty before
+  balanceAfter  Int // available qty after
+  reason        String?
+  orderId       String?
+  adminId       String?
+  adminName     String?
+  createdAt     DateTime @default(now())
+}
+
+// ─── Delivery zones (Cairo/Giza, independent shipping fee, can disable) ───
+model DeliveryZone {
+  id          String   @id @default(cuid())
+  name        String
+  shippingFee Float
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+// ─── Discount codes (percentage-based) ───
+model DiscountCode {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  percentage Float
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// ─── Banners (image + caption) ───
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  subtitle  String?
+  image     String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Orders (COD only; price snapshot stored in items) ───
+model Order {
+  id                 String        @id @default(cuid())
+  orderNumber        String        @unique // BR-YYMMDD-XXXX
+  customerId         String
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  status             String        @default("PENDING_REVIEW") // PENDING_REVIEW | CONFIRMED | OUT_FOR_DELIVERY | DELIVERED | REJECTED | CANCELLED
+  name               String
+  phonePrimary       String
+  phoneSecondary     String
+  whatsappOn         String        @default("primary") // primary | secondary | both
+  addressText        String
+  lat                Float?
+  lng                Float?
+  floor              String
+  apartment          String
+  zoneId             String
+  zone               DeliveryZone  @relation(fields: [zoneId], references: [id])
+  subtotal           Float
+  discountAmount     Float         @default(0)
+  discountCode       String?
+  shippingFee        Float
+  total              Float
+  rejectionReason    String?
+  cancellationReason String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  items              OrderItem[]
+}
+
+// ─── Order items (historical snapshot of names/prices/colors) ───
+model OrderItem {
+  id           String  @id @default(cuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  productName  String
+  productImage String?
+  skuId        String
+  skuCode      String
+  colorName    String?
+  colorHex     String?
+  unitPrice    Float // effective unit price at order time (sale price if any)
+  basePrice    Float // original price
+  quantity     Int
+  lineTotal    Float
+}
+
+// ─── In-app notifications (bell) for customers & admins ───
+model Notification {
+  id        String    @id @default(cuid())
+  role      String // CUSTOMER | ADMIN
+  customerId String?
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type      String // ORDER_STATUS | NEW_ORDER | LOW_STOCK | OUT_OF_STOCK | INFO
+  title     String
+  message   String
+  orderId   String?
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+}
+
+// ─── Admin activity log (who did what, when, on which entity) ───
+model ActivityLog {
+  id         String   @id @default(cuid())
+  adminId    String?
+  adminName  String?
+  action     String // PRODUCT_CREATE | PRODUCT_UPDATE | PRODUCT_ARCHIVE | CATEGORY_CREATE | ... | ORDER_CONFIRM | ORDER_REJECT | ORDER_CANCEL | ORDER_STATUS | STOCK_ADJUST | STOCK_RECEIVE | ZONE_UPDATE | BANNER_* | DISCOUNT_*
+  entityType String
+  entityId   String?
+  details    String? // JSON string with human-readable summary
+  createdAt  DateTime @default(now())
+}

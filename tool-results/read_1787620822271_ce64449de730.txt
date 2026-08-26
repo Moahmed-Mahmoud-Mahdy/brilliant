@@ -1,0 +1,1011 @@
+     1→/**
+     2→ * BRILLIANT — Database seed
+     3→ * Run: bun prisma/seed.ts
+     4→ */
+     5→import { PrismaClient } from "@prisma/client";
+     6→import { randomBytes, scryptSync } from "crypto";
+     7→
+     8→const db = new PrismaClient();
+     9→
+    10→// ─── Same hashing as src/lib/auth.ts ───
+    11→function hashPassword(password: string): string {
+    12→  const salt = randomBytes(16).toString("hex");
+    13→  const hash = scryptSync(password, salt, 64).toString("hex");
+    14→  return `${salt}:${hash}`;
+    15→}
+    16→
+    17→// ─── Inventory helpers mirroring business rules ───
+    18→async function receiveStock(skuId: string, qty: number, reason: string) {
+    19→  const sku = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
+    20→  const before = sku.availableQty;
+    21→  await db.sku.update({
+    22→    where: { id: skuId },
+    23→    data: { availableQty: before + qty },
+    24→  });
+    25→  await db.inventoryTransaction.create({
+    26→    data: {
+    27→      skuId,
+    28→      type: "RECEIVE",
+    29→      quantity: qty,
+    30→      balanceBefore: before,
+    31→      balanceAfter: before + qty,
+    32→      reason,
+    33→    },
+    34→  });
+    35→}
+    36→
+    37→async function reserveStock(skuId: string, qty: number, orderNumber: string, adminName: string) {
+    38→  const sku = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
+    39→  const before = sku.availableQty;
+    40→  await db.sku.update({
+    41→    where: { id: skuId },
+    42→    data: { availableQty: before - qty, reservedQty: sku.reservedQty + qty },
+    43→  });
+    44→  await db.inventoryTransaction.create({
+    45→    data: {
+    46→      skuId,
+    47→      type: "RESERVE",
+    48→      quantity: -qty,
+    49→      balanceBefore: before,
+    50→      balanceAfter: before - qty,
+    51→      reason: `حجز كمية للطلب ${orderNumber}`,
+    52→      orderId: orderNumber,
+    53→      adminName,
+    54→    },
+    55→  });
+    56→}
+    57→
+    58→async function releaseStock(skuId: string, qty: number, orderNumber: string, adminName: string) {
+    59→  const sku = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
+    60→  const before = sku.availableQty;
+    61→  await db.sku.update({
+    62→    where: { id: skuId },
+    63→    data: { availableQty: before + qty, reservedQty: Math.max(0, sku.reservedQty - qty) },
+    64→  });
+    65→  await db.inventoryTransaction.create({
+    66→    data: {
+    67→      skuId,
+    68→      type: "RELEASE",
+    69→      quantity: qty,
+    70→      balanceBefore: before,
+    71→      balanceAfter: before + qty,
+    72→      reason: `تحرير حجز عند إلغاء الطلب ${orderNumber}`,
+    73→      orderId: orderNumber,
+    74→      adminName,
+    75→    },
+    76→  });
+    77→}
+    78→
+    79→async function saleStock(skuId: string, qty: number, orderNumber: string, adminName: string) {
+    80→  const sku = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
+    81→  await db.sku.update({
+    82→    where: { id: skuId },
+    83→    data: { reservedQty: Math.max(0, sku.reservedQty - qty), soldQty: sku.soldQty + qty },
+    84→  });
+    85→  await db.inventoryTransaction.create({
+    86→    data: {
+    87→      skuId,
+    88→      type: "SALE",
+    89→      quantity: -qty,
+    90→      balanceBefore: sku.availableQty,
+    91→      balanceAfter: sku.availableQty,
+    92→      reason: `تثبيت بيع الطلب ${orderNumber} عند التسليم`,
+    93→      orderId: orderNumber,
+    94→      adminName,
+    95→    },
+    96→  });
+    97→}
+    98→
+    99→function daysAgo(n: number, hours = 0): Date {
+   100→  const d = new Date();
+   101→  d.setDate(d.getDate() - n);
+   102→  d.setHours(d.getHours() - hours);
+   103→  return d;
+   104→}
+   105→
+   106→async function main() {
+   107→  console.log("🌱 Seeding BRILLIANT database...");
+   108→
+   109→  // Clean slate
+   110→  await db.notification.deleteMany();
+   111→  await db.activityLog.deleteMany();
+   112→  await db.inventoryTransaction.deleteMany();
+   113→  await db.orderItem.deleteMany();
+   114→  await db.order.deleteMany();
+   115→  await db.sku.deleteMany();
+   116→  await db.product.deleteMany();
+   117→  await db.category.deleteMany();
+   118→  await db.deliveryZone.deleteMany();
+   119→  await db.discountCode.deleteMany();
+   120→  await db.banner.deleteMany();
+   121→  await db.customer.deleteMany();
+   122→  await db.admin.deleteMany();
+   123→
+   124→  // ─── Admins ───
+   125→  const admin1 = await db.admin.create({
+   126→    data: { username: "admin1", name: "أحمد — مدير المتجر", passwordHash: hashPassword("brilliant2026") },
+   127→  });
+   128→  const admin2 = await db.admin.create({
+   129→    data: { username: "admin2", name: "منى — مديرة العمليات", passwordHash: hashPassword("brilliant2026") },
+   130→  });
+   131→  console.log("✓ Admins");
+   132→
+   133→  // ─── Categories ───
+   134→  const skincare = await db.category.create({
+   135→    data: { name: "العناية بالبشرة", description: "سيرومات وكريمات وروتين كامل لبشرة صحية ومشرقة", sortOrder: 1 },
+   136→  });
+   137→  const makeup = await db.category.create({
+   138→    data: { name: "المكياج", description: "أحمر شفاه، كريم أساس، ظلال والمزيد بألوان موسمية", sortOrder: 2 },
+   139→  });
+   140→  const haircare = await db.category.create({
+   141→    data: { name: "العناية بالشعر", description: "زيوت وشامبو لشعر قوي ولامع", sortOrder: 3 },
+   142→  });
+   143→  const fragrance = await db.category.create({
+   144→    data: { name: "العطور", description: "عطور فاخرة ومعطرات جسم بروائح تدوم", sortOrder: 4 },
+   145→  });
+   146→  const bodycare = await db.category.create({
+   147→    data: { name: "العناية بالجسم", description: "مقشرات ولوشن لنعومة تدوم طول اليوم", sortOrder: 5 },
+   148→  });
+   149→  const gifts = await db.category.create({
+   150→    data: { name: "مجموعات الهدايا", description: "صناديق هدايا فاخرة من بريليانت لكل المناسبات", sortOrder: 6 },
+   151→  });
+   152→  console.log("✓ Categories");
+   153→
+   154→  // ─── SKU code generator ───
+   155→  let skuCounter = 100000;
+   156→  const nextSkuCode = () => `BR-${++skuCounter}`;
+   157→
+   158→  interface ColorSpec {
+   159→    name: string;
+   160→    hex: string;
+   161→    qty: number;
+   162→    threshold?: number;
+   163→  }
+   164→
+   165→  async function createProduct(opts: {
+   166→    name: string;
+   167→    description: string;
+   168→    price: number;
+   169→    salePrice?: number;
+   170→    images: string[];
+   171→    categoryId: string;
+   172→    attrs?: [string, string][];
+   173→    colors?: ColorSpec[];
+   174→    baseQty?: number;
+   175→    baseThreshold?: number;
+   176→  }) {
+   177→    const product = await db.product.create({
+   178→      data: {
+   179→        name: opts.name,
+   180→        description: opts.description,
+   181→        price: opts.price,
+   182→        salePrice: opts.salePrice ?? null,
+   183→        images: JSON.stringify(opts.images),
+   184→        attributes: JSON.stringify(
+   185→          (opts.attrs || []).map(([key, value]) => ({ key, value }))
+   186→        ),
+   187→        categoryId: opts.categoryId,
+   188→        status: "ACTIVE",
+   189→      },
+   190→    });
+   191→    if (opts.colors && opts.colors.length > 0) {
+   192→      for (const c of opts.colors) {
+   193→        const sku = await db.sku.create({
+   194→          data: {
+   195→            skuCode: nextSkuCode(),
+   196→            productId: product.id,
+   197→            colorName: c.name,
+   198→            colorHex: c.hex,
+   199→            isBase: false,
+   200→            availableQty: 0,
+   201→            lowStockThreshold: c.threshold ?? 3,
+   202→          },
+   203→        });
+   204→        if (c.qty > 0) await receiveStock(sku.id, c.qty, `مخزون افتتاحي — ${opts.name} (${c.name})`);
+   205→      }
+   206→    } else {
+   207→      const sku = await db.sku.create({
+   208→        data: {
+   209→          skuCode: nextSkuCode(),
+   210→          productId: product.id,
+   211→          isBase: true,
+   212→          availableQty: 0,
+   213→          lowStockThreshold: opts.baseThreshold ?? 3,
+   214→        },
+   215→      });
+   216→      if ((opts.baseQty ?? 0) > 0)
+   217→        await receiveStock(sku.id, opts.baseQty!, `مخزون افتتاحي — ${opts.name}`);
+   218→    }
+   219→    return product;
+   220→  }
+   221→
+   222→  const IMG = (name: string) => `/images/products/${name}`;
+   223→
+   224→  // ─── Products ───
+   225→  const serum = await createProduct({
+   226→    name: "سيروم فيتامين سي المركّز 15%",
+   227→    description:
+   228→      "سيروم مركّز بفيتامين سي النقي بتركيز 15% لتفتيح البشرة وتوحيد لونها وتحفيز إنتاج الكولاجين. تركيبة خفيفة سريعة الامتصاص مع فيتامين E وحمض الهيالورونيك لترطيب عميق. استخدميه صباحًا قبل واقي الشفة للحصول على أفضل النتائج.",
+   229→    price: 850,
+   230→    salePrice: 720,
+   231→    images: [IMG("serum.png")],
+   232→    categoryId: skincare.id,
+   233→    attrs: [
+   234→      ["الحجم", "30 مل"],
+   235→      ["نوع البشرة", "جميع أنواع البشرة"],
+   236→      ["المكونات الرئيسية", "فيتامين سي، فيتامين E، حمض الهيالورونيك"],
+   237→      ["بلد المنشأ", "فرنسا"],
+   238→    ],
+   239→    baseQty: 25,
+   240→    baseThreshold: 5,
+   241→  });
+   242→
+   243→  const cream = await createProduct({
+   244→    name: "كريم مرطب بزبدة الشيا",
+   245→    description:
+   246→      "كريم مرطب غني بزبدة الشيا الخام وزيت الجوجوبا لترطيب عميق يدوم 24 ساعة. يغذي البشرة الجافة ويعيد لها نعومتها ومرونتها دون ملمس دهني. مثالي للاستخدام الليلي أو كأساس لروتين النهار في الأجواء الباردة.",
+   247→    price: 620,
+   248→    images: [IMG("cream.png")],
+   249→    categoryId: skincare.id,
+   250→    attrs: [
+   251→      ["الحجم", "50 مل"],
+   252→      ["نوع البشرة", "البشرة الجافة والعادية"],
+   253→      ["بلد المنشأ", "كوريا الجنوبية"],
+   254→    ],
+   255→    baseQty: 20,
+   256→    baseThreshold: 4,
+   257→  });
+   258→
+   259→  const cleanser = await createProduct({
+   260→    name: "غسول الوجه اللطيف بزيت الجوجوبا",
+   261→    description:
+   262→      "غسول رغوي لطيف ينظف البشرة بعمق دون أن يجففها. يحتوي على زيت الجوجوبا وخلاصة البابونج لتهدئة البشرة الحساسة وإزالة المكياج والشوائب بلطف. مناسب للاستخدام اليومي صباحًا ومساءً.",
+   263→    price: 380,
+   264→    images: [IMG("cleanser.png")],
+   265→    categoryId: skincare.id,
+   266→    attrs: [
+   267→      ["الحجم", "200 مل"],
+   268→      ["نوع البشرة", "جميع أنواع البشرة بما فيها الحساسة"],
+   269→      ["بلد المنشأ", "ألمانيا"],
+   270→    ],
+   271→    baseQty: 18,
+   272→    baseThreshold: 4,
+   273→  });
+   274→
+   275→  const clayMask = await createProduct({
+   276→    name: "ماسك الطين المغربي المنقي",
+   277→    description:
+   278→      "ماسك طيني منقي من الطين المغربي البركاني يمتص الزيوت الزائدة وينقي المسام بعمق. غني بالمعادن الطبيعية التي تترك البشرة نظيفة ومنتعشة. استخدميه مرة أو مرتين أسبوعيًا لمدة 10-15 دقيقة.",
+   279→    price: 450,
+   280→    images: [IMG("claymask.png")],
+   281→    categoryId: skincare.id,
+   282→    attrs: [
+   283→      ["الحجم", "150 جرام"],
+   284→      ["نوع البشرة", "البشرة الدهنية والمختلطة"],
+   285→      ["بلد المنشأ", "المغرب"],
+   286→    ],
+   287→    baseQty: 12,
+   288→    baseThreshold: 3,
+   289→  });
+   290→
+   291→  const toner = await createProduct({
+   292→    name: "تونر ماء الورد الطائفي",
+   293→    description:
+   294→      "تونر منعش بماء الورد الطائفي النقي يوازن حموضة البشرة ويضيّق المسام ويمنحها انتعاشًا فوريًا. خالٍ من الكحول والعطور الصناعية. رشّيه على البشرة بعد الغسول أو استخدميه كقاعدة للترطيب.",
+   295→    price: 320,
+   296→    images: [IMG("toner.png")],
+   297→    categoryId: skincare.id,
+   298→    attrs: [
+   299→      ["الحجم", "250 مل"],
+   300→      ["نوع البشرة", "جميع أنواع البشرة"],
+   301→      ["بلد المنشأ", "السعودية"],
+   302→    ],
+   303→    baseQty: 4,
+   304→    baseThreshold: 5,
+   305→  });
+   306→
+   307→  const lipstick = await createProduct({
+   308→    name: "أحمر شفاه مخملي Velvet Matte",
+   309→    description:
+   310→      "أحمر شفاه بتركيبة مخملية مطفية تدوم حتى 8 ساعات دون جفاف أو ثقل على الشفاه. غني بزبدة الشيا وفيتامين E لعناية مريحة أثناء ارتدائه. متوفر بألوان موسمية تناسب كل درجات البشرة.",
+   311→    price: 480,
+   312→    images: [IMG("lipstick.png"), IMG("lipstick2.png")],
+   313→    categoryId: makeup.id,
+   314→    attrs: [
+   315→      ["التغطية", "عالية"],
+   316→      ["اللمسة النهائية", "مطفي مخملي"],
+   317→      ["الثبات", "حتى 8 ساعات"],
+   318→    ],
+   319→    colors: [
+   320→      { name: "أحمر كلاسيك", hex: "#B0222B", qty: 10 },
+   321→      { name: "وردي ناعم", hex: "#E8A0B0", qty: 5 },
+   322→      { name: "بني نيود", hex: "#8B5A42", qty: 0 },
+   323→      { name: "مرجاني دافئ", hex: "#E06A50", qty: 7 },
+   324→    ],
+   325→  });
+   326→
+   327→  const foundation = await createProduct({
+   328→    name: "كريم أساس عالي التغطية Flawless",
+   329→    description:
+   330→      "كريم أساس بتغطية عالية قابلة للبناء ولمسة نهائية طبيعية تدوم 16 ساعة. تركيبة مقاومة للعرق والحرارة مناسبة لأجواء مصر. بدرجات دافئة تناسب البشرة المصرية، ومعامل حماية SPF20.",
+   331→    price: 750,
+   332→    salePrice: 640,
+   333→    images: [IMG("foundation.png")],
+   334→    categoryId: makeup.id,
+   335→    attrs: [
+   336→      ["الحجم", "30 مل"],
+   337→      ["التغطية", "عالية قابلة للبناء"],
+   338→      ["الحماية", "SPF 20"],
+   339→      ["الثبات", "حتى 16 ساعة"],
+   340→    ],
+   341→    colors: [
+   342→      { name: "عاجي", hex: "#F5DCC0", qty: 8 },
+   343→      { name: "بيج طبيعي", hex: "#E8C39E", qty: 12 },
+   344→      { name: "عسلي", hex: "#D9A87A", qty: 6 },
+   345→      { name: "كراميل", hex: "#B97F56", qty: 3 },
+   346→    ],
+   347→  });
+   348→
+   349→  const palette = await createProduct({
+   350→    name: "باليت الظلال الذهبية Golden Hour",
+   351→    description:
+   352→      "باليت 12 ظل بألوان ذهبية وترابية دافئة بين المطفي واللامع. بودرة ناعمة عالية التصبغ قابلة للدمج بسهولة وتدوم طوال اليوم. مثالي لإطلالات النهار والسهرات.",
+   353→    price: 990,
+   354→    salePrice: 840,
+   355→    images: [IMG("palette.png")],
+   356→    categoryId: makeup.id,
+   357→    attrs: [
+   358→      ["عدد الألوان", "12 لون"],
+   359→      ["اللمسة النهائية", "مطفي ولامع"],
+   360→    ],
+   361→    baseQty: 15,
+   362→    baseThreshold: 4,
+   363→  });
+   364→
+   365→  const mascara = await createProduct({
+   366→    name: "ماسكارا تكثيف الرموش Volume",
+   367→    description:
+   368→      "ماسكارا تكثيف وتطويل بفرشاة مخروطية تصل لأصغر رموش. تركيبة مقاومة للتلطخ والرطوبة تمنح رموشك حجمًا مضاعفًا من أول طبقة. سهلة الإزالة بالماء الفاتر.",
+   369→    price: 420,
+   370→    images: [IMG("mascara.png")],
+   371→    categoryId: makeup.id,
+   372→    attrs: [
+   373→      ["الفائدة", "تكثيف وتطويل"],
+   374→      ["مقاومة", "للرطوبة والتلطخ"],
+   375→    ],
+   376→    colors: [
+   377→      { name: "أسود", hex: "#1A1A1A", qty: 20 },
+   378→      { name: "بني داكن", hex: "#4A3226", qty: 8 },
+   379→    ],
+   380→  });
+   381→
+   382→  const blush = await createProduct({
+   383→    name: "أحمر خدود وردي Rosy Glow",
+   384→    description:
+   385→      "أحمر خدود ببودرة حريرية تمنح وجنتيك لونًا ورديًا طبيعيًا كأنه من داخل البشرة. تركيبة خفيفة قابلة للبناء تدوم طويلًا وتناسب كل درجات البشرة.",
+   386→    price: 390,
+   387→    images: [IMG("blush.png")],
+   388→    categoryId: makeup.id,
+   389→    colors: [
+   390→      { name: "وردي فاتح", hex: "#F2B8C6", qty: 9 },
+   391→      { name: "خوخي", hex: "#E89B7D", qty: 2 },
+   392→    ],
+   393→  });
+   394→
+   395→  const arganOil = await createProduct({
+   396→    name: "زيت الأرجان المغربي النقي 100%",
+   397→    description:
+   398→      "زيت أرجان مغربي نقي معصور على البارد للشعر والبشرة والأظافر. غني بفيتامين E والأحماض الدهنية التي تغذي بعمق وتعيد اللمعان الطبيعي للشعر التالف. قطرات قليلة تكفي.",
+   399→    price: 550,
+   400→    images: [IMG("arganoil.png")],
+   401→    categoryId: haircare.id,
+   402→    attrs: [
+   403→      ["الحجم", "100 مل"],
+   404→      ["النقاء", "100% زيت أرجان معصور على البارد"],
+   405→      ["بلد المنشأ", "المغرب"],
+   406→    ],
+   407→    baseQty: 30,
+   408→    baseThreshold: 6,
+   409→  });
+   410→
+   411→  const shampoo = await createProduct({
+   412→    name: "شامبو خالٍ من السلفات بزيت الأرجان",
+   413→    description:
+   414→      "شامبو لطيف خالٍ من السلفات والبارابين ينظف فروة الرأس بعمق دون تجريدها من زيوتها الطبيعية. غني بزيت الأرجان والكيراتين لعلاج التقصف والهيشان. آمن للشعر المصبوغ.",
+   415→    price: 480,
+   416→    images: [IMG("shampoo.png")],
+   417→    categoryId: haircare.id,
+   418→    attrs: [
+   419→      ["الحجم", "400 مل"],
+   420→      ["خالٍ من", "السلفات والبارابين"],
+   421→    ],
+   422→    baseQty: 16,
+   423→    baseThreshold: 4,
+   424→  });
+   425→
+   426→  const perfume = await createProduct({
+   427→    name: "عطر غولدن أوا Golden Aura EDP",
+   428→    description:
+   429→      "عطر نسائي فاخر بمقدمة من البرغموت والكشمش، وقلب من الياسمين وزهرة البرتقال، وقاعدة دافئة من الفانيليا والعنبر وخشب الصندل. ثبات يدوم أكثر من 10 ساعات وفوحان أنيق يلفت الأنظار.",
+   430→    price: 1450,
+   431→    salePrice: 1190,
+   432→    images: [IMG("perfume.png")],
+   433→    categoryId: fragrance.id,
+   434→    attrs: [
+   435→      ["الحجم", "100 مل"],
+   436→      ["التركيز", "Eau de Parfum"],
+   437→      ["المقدمة", "برغموت، كشمش"],
+   438→      ["القلب", "ياسمين، زهرة البرتقال"],
+   439→      ["القاعدة", "فانيليا، عنبر، خشب الصندل"],
+   440→    ],
+   441→    baseQty: 7,
+   442→    baseThreshold: 3,
+   443→  });
+   444→
+   445→  const bodyMist = await createProduct({
+   446→    name: "معطر الجسم بالفانيلا والكاكاو",
+   447→    description:
+   448→      "معطر جسم منعش برائحة الفانيلا الدافئة والكاكاو الغني. رذاذ خفيف يمنح بشرتك عطرًا هادئًا يدوم لساعات مع لمسة ترطيب. مثالي للاستخدام اليومي.",
+   449→    price: 390,
+   450→    images: [IMG("bodymist.png")],
+   451→    categoryId: fragrance.id,
+   452→    attrs: [
+   453→      ["الحجم", "200 مل"],
+   454→      ["العائلة العطرية", "خشبية حلوة"],
+   455→    ],
+   456→    baseQty: 0,
+   457→    baseThreshold: 3,
+   458→  });
+   459→
+   460→  const scrub = await createProduct({
+   461→    name: "مقشر الجسم بالقهوة العربية",
+   462→    description:
+   463→      "مقشر جسم طبيعي بحبيبات القهوة العربية العربية وزيت جوز الهند يزيل الجلد الميت ويحفز الدورة الدموية لبشرة أنعم وأكثر إشراقًا. مع كريم مرطب خفيف يترك بشرتك ناعمة فورًا بعد الاستحمام.",
+   464→    price: 350,
+   465→    images: [IMG("scrub.png")],
+   466→    categoryId: bodycare.id,
+   467→    attrs: [
+   468→      ["الحجم", "250 جرام"],
+   469→      ["الاستخدام", "مرتين أسبوعيًا"],
+   470→    ],
+   471→    baseQty: 22,
+   472→    baseThreshold: 5,
+   473→  });
+   474→
+   475→  const lotion = await createProduct({
+   476→    name: "لوشن الجسم بالكاكاو باتر",
+   477→    description:
+   478→      "لوشن جسم غني بالكاكاو باتر وزبدة الشيا لترطيب مكثف يدوم 48 ساعة. سريع الامتصاص وغير دهني، يترك بشرتك ناعمة برائحة كاكاو دافئة تدوم طويلًا.",
+   479→    price: 420,
+   480→    images: [IMG("lotion.png")],
+   481→    categoryId: bodycare.id,
+   482→    attrs: [
+   483→      ["الحجم", "400 مل"],
+   484→      ["الترطيب", "يدوم 48 ساعة"],
+   485→    ],
+   486→    baseQty: 14,
+   487→    baseThreshold: 4,
+   488→  });
+   489→
+   490→  const giftBox = await createProduct({
+   491→    name: "صندوق هدية بريليانت جولد",
+   492→    description:
+   493→      "صندوق هدية فاخر بتنسيق ذهبي أنيق يضم مختارات بريليانت الأكثر مبيعًا: سيروم فيتامين سي، أحمر شفاه Velvet Matte، وزيت أرجان نقي. يأتي بتغليف هدايا مع بطاقة إهداء مخصصة — الهدية المثالية لكل من تحبين.",
+   494→    price: 1800,
+   495→    salePrice: 1590,
+   496→    images: [IMG("giftbox.png")],
+   497→    categoryId: gifts.id,
+   498→    attrs: [
+   499→      ["محتويات الصندوق", "سيروم + أحمر شفاه + زيت أرجان"],
+   500→      ["التغليف", "صندوق ذهبي مع بطاقة إهداء"],
+   501→    ],
+   502→    baseQty: 5,
+   503→    baseThreshold: 2,
+   504→  });
+   505→  console.log("✓ Products + SKUs");
+   506→
+   507→  // ─── Delivery zones (Cairo & Giza) ───
+   508→  const zoneNasr = await db.deliveryZone.create({ data: { name: "مدينة نصر — القاهرة", shippingFee: 35, sortOrder: 1 } });
+   509→  const zoneHeliopolis = await db.deliveryZone.create({ data: { name: "مصر الجديدة — القاهرة", shippingFee: 35, sortOrder: 2 } });
+   510→  await db.deliveryZone.create({ data: { name: "المعادي — القاهرة", shippingFee: 40, sortOrder: 3 } });
+   511→  await db.deliveryZone.create({ data: { name: "وسط البلد — القاهرة", shippingFee: 30, sortOrder: 4 } });
+   512→  await db.deliveryZone.create({ data: { name: "التجمع الخامس — القاهرة", shippingFee: 45, sortOrder: 5 } });
+   513→  await db.deliveryZone.create({ data: { name: "الدقي — القاهرة", shippingFee: 35, sortOrder: 6 } });
+   514→  await db.deliveryZone.create({ data: { name: "المهندسين — الجيزة", shippingFee: 40, sortOrder: 7 } });
+   515→  await db.deliveryZone.create({ data: { name: "الهرم — الجيزة", shippingFee: 45, sortOrder: 8 } });
+   516→  await db.deliveryZone.create({ data: { name: "6 أكتوبر — الجيزة", shippingFee: 50, sortOrder: 9 } });
+   517→  await db.deliveryZone.create({ data: { name: "شبرا — القاهرة", shippingFee: 30, sortOrder: 10 } });
+   518→  console.log("✓ Delivery zones");
+   519→
+   520→  // ─── Discount codes ───
+   521→  await db.discountCode.create({
+   522→    data: { code: "WELCOME10", percentage: 10, isActive: true },
+   523→  });
+   524→  await db.discountCode.create({
+   525→    data: { code: "GOLD20", percentage: 20, expiresAt: new Date("2027-12-31"), isActive: true },
+   526→  });
+   527→  await db.discountCode.create({
+   528→    data: { code: "SUMMER15", percentage: 15, expiresAt: new Date("2025-01-01"), isActive: true },
+   529→  });
+   530→  console.log("✓ Discount codes");
+   531→
+   532→  // ─── Banners ───
+   533→  await db.banner.create({
+   534→    data: {
+   535→      title: "بريليانت — فخامة تليق بكِ",
+   536→      subtitle: "اكتشفي مجموعتنا المختارة من مستحضرات العناية والتجميل الأصلية",
+   537→      image: "/images/banners/banner1.png",
+   538→      sortOrder: 1,
+   539→    },
+   540→  });
+   541→  await db.banner.create({
+   542→    data: {
+   543→      title: "مجموعة المكياج الذهبية",
+   544→      subtitle: "ألوان موسمية جديدة بخصومات مباشرة تصل إلى 20%",
+   545→      image: "/images/banners/banner2.png",
+   546→      sortOrder: 2,
+   547→    },
+   548→  });
+   549→  await db.banner.create({
+   550→    data: {
+   551→      title: "روتين العناية بالبشرة",
+   552→      subtitle: "كل ما تحتاجينه لبشرة مشرقة وصحية — من الغسول إلى السيروم",
+   553→      image: "/images/banners/banner3.png",
+   554→      sortOrder: 3,
+   555→    },
+   556→  });
+   557→  console.log("✓ Banners");
+   558→
+   559→  // ─── Customers ───
+   560→  const sara = await db.customer.create({
+   561→    data: { name: "سارة محمد", phone: "01000000000", passwordHash: hashPassword("123456") },
+   562→  });
+   563→  const nour = await db.customer.create({
+   564→    data: { name: "نور علي", phone: "01111111111", passwordHash: hashPassword("123456") },
+   565→  });
+   566→  const mariam = await db.customer.create({
+   567→    data: { name: "مريم حسن", phone: "01222222222", passwordHash: hashPassword("123456") },
+   568→  });
+   569→  console.log("✓ Customers");
+   570→
+   571→  // ─── SKU lookup helpers ───
+   572→  async function baseSku(productId: string) {
+   573→    return db.sku.findFirstOrThrow({ where: { productId, isBase: true } });
+   574→  }
+   575→  async function colorSku(productId: string, colorName: string) {
+   576→    return db.sku.findFirstOrThrow({ where: { productId, colorName } });
+   577→  }
+   578→
+   579→  async function logAction(
+   580→    admin: { id: string; name: string },
+   581→    action: string,
+   582→    entityType: string,
+   583→    entityId: string,
+   584→    details: string
+   585→  ) {
+   586→    await db.activityLog.create({
+   587→      data: {
+   588→        adminId: admin.id,
+   589→        adminName: admin.name,
+   590→        action,
+   591→        entityType,
+   592→        entityId,
+   593→        details: JSON.stringify({ summary: details }),
+   594→      },
+   595→    });
+   596→  }
+   597→
+   598→  async function notifyCustomer(customerId: string, type: string, title: string, message: string, orderId?: string) {
+   599→    await db.notification.create({
+   600→      data: { role: "CUSTOMER", customerId, type, title, message, orderId },
+   601→    });
+   602→  }
+   603→  async function notifyAdmins(type: string, title: string, message: string, orderId?: string) {
+   604→    for (const admin of [admin1, admin2]) {
+   605→      await db.notification.create({
+   606→        data: { role: "ADMIN", type, title, message, orderId },
+   607→      });
+   608→    }
+   609→  }
+   610→
+   611→  let orderSeq = 0;
+   612→  function orderNumber(daysBack: number): string {
+   613→    const d = daysAgo(daysBack);
+   614→    const y = String(d.getFullYear()).slice(2);
+   615→    const m = String(d.getMonth() + 1).padStart(2, "0");
+   616→    const day = String(d.getDate()).padStart(2, "0");
+   617→    return `BR-${y}${m}${day}-${String(++orderSeq).padStart(4, "0")}`;
+   618→  }
+   619→
+   620→  // ─── Orders ───
+   621→  // 1) Sara — DELIVERED (3 days ago)
+   622→  {
+   623→    const num = orderNumber(3);
+   624→    const lipRed = await colorSku(lipstick.id, "أحمر كلاسيك");
+   625→    const serumBase = await baseSku(serum.id);
+   626→    const order = await db.order.create({
+   627→      data: {
+   628→        orderNumber: num,
+   629→        customerId: sara.id,
+   630→        status: "DELIVERED",
+   631→        name: "سارة محمد",
+   632→        phonePrimary: "01000000000",
+   633→        phoneSecondary: "01223344556",
+   634→        whatsappOn: "primary",
+   635→        addressText: "شارع عباس العقاد، أمام كلية التجارة",
+   636→        lat: 30.0566,
+   637→        lng: 31.3302,
+   638→        floor: "3",
+   639→        apartment: "12",
+   640→        zoneId: zoneNasr.id,
+   641→        subtotal: 1200,
+   642→        discountAmount: 0,
+   643→        shippingFee: 35,
+   644→        total: 1235,
+   645→        createdAt: daysAgo(3, 2),
+   646→        updatedAt: daysAgo(2, 6),
+   647→      },
+   648→    });
+   649→    await db.orderItem.createMany({
+   650→      data: [
+   651→        {
+   652→          orderId: order.id,
+   653→          productId: lipstick.id,
+   654→          productName: lipstick.name,
+   655→          productImage: IMG("lipstick.png"),
+   656→          skuId: lipRed.id,
+   657→          skuCode: lipRed.skuCode,
+   658→          colorName: "أحمر كلاسيك",
+   659→          colorHex: "#B0222B",
+   660→          unitPrice: 480,
+   661→          basePrice: 480,
+   662→          quantity: 1,
+   663→          lineTotal: 480,
+   664→        },
+   665→        {
+   666→          orderId: order.id,
+   667→          productId: serum.id,
+   668→          productName: serum.name,
+   669→          productImage: IMG("serum.png"),
+   670→          skuId: serumBase.id,
+   671→          skuCode: serumBase.skuCode,
+   672→          unitPrice: 720,
+   673→          basePrice: 850,
+   674→          quantity: 1,
+   675→          lineTotal: 720,
+   676→        },
+   677→      ],
+   678→    });
+   679→    await reserveStock(lipRed.id, 1, num, admin1.name);
+   680→    await reserveStock(serumBase.id, 1, num, admin1.name);
+   681→    await saleStock(lipRed.id, 1, num, admin1.name);
+   682→    await saleStock(serumBase.id, 1, num, admin1.name);
+   683→    await logAction(admin1, "ORDER_CONFIRM", "Order", order.id, `تأكيد الطلب ${num} وحجز الكمية`);
+   684→    await logAction(admin1, "ORDER_STATUS", "Order", order.id, `تحديث الطلب ${num} إلى جاري التوصيل`);
+   685→    await logAction(admin1, "ORDER_STATUS", "Order", order.id, `تم تسليم الطلب ${num} بنجاح`);
+   686→    await notifyCustomer(sara.id, "ORDER_STATUS", "تم تسليم طلبك", `تم تسليم الطلب ${num} بنجاح. نتمنى أن يعجبك!`, order.id);
+   687→  }
+   688→
+   689→  // 2) Sara — OUT_FOR_DELIVERY (yesterday)
+   690→  {
+   691→    const num = orderNumber(1);
+   692→    const fBeige = await colorSku(foundation.id, "بيج طبيعي");
+   693→    const scrubBase = await baseSku(scrub.id);
+   694→    const order = await db.order.create({
+   695→      data: {
+   696→        orderNumber: num,
+   697→        customerId: sara.id,
+   698→        status: "OUT_FOR_DELIVERY",
+   699→        name: "سارة محمد",
+   700→        phonePrimary: "01000000000",
+   701→        phoneSecondary: "01223344556",
+   702→        whatsappOn: "both",
+   703→        addressText: "شارع عباس العقاد، أمام كلية التجارة",
+   704→        lat: 30.0566,
+   705→        lng: 31.3302,
+   706→        floor: "3",
+   707→        apartment: "12",
+   708→        zoneId: zoneNasr.id,
+   709→        subtotal: 1340,
+   710→        discountAmount: 134,
+   711→        discountCode: "WELCOME10",
+   712→        shippingFee: 35,
+   713→        total: 1241,
+   714→        createdAt: daysAgo(1, 3),
+   715→        updatedAt: daysAgo(0, 4),
+   716→      },
+   717→    });
+   718→    await db.orderItem.createMany({
+   719→      data: [
+   720→        {
+   721→          orderId: order.id,
+   722→          productId: foundation.id,
+   723→          productName: foundation.name,
+   724→          productImage: IMG("foundation.png"),
+   725→          skuId: fBeige.id,
+   726→          skuCode: fBeige.skuCode,
+   727→          colorName: "بيج طبيعي",
+   728→          colorHex: "#E8C39E",
+   729→          unitPrice: 640,
+   730→          basePrice: 750,
+   731→          quantity: 1,
+   732→          lineTotal: 640,
+   733→        },
+   734→        {
+   735→          orderId: order.id,
+   736→          productId: scrub.id,
+   737→          productName: scrub.name,
+   738→          productImage: IMG("scrub.png"),
+   739→          skuId: scrubBase.id,
+   740→          skuCode: scrubBase.skuCode,
+   741→          unitPrice: 350,
+   742→          basePrice: 350,
+   743→          quantity: 2,
+   744→          lineTotal: 700,
+   745→        },
+   746→      ],
+   747→    });
+   748→    await reserveStock(fBeige.id, 1, num, admin2.name);
+   749→    await reserveStock(scrubBase.id, 2, num, admin2.name);
+   750→    await logAction(admin2, "ORDER_CONFIRM", "Order", order.id, `تأكيد الطلب ${num} وحجز الكمية`);
+   751→    await logAction(admin2, "ORDER_STATUS", "Order", order.id, `تحديث الطلب ${num} إلى جاري التوصيل`);
+   752→    await notifyCustomer(sara.id, "ORDER_STATUS", "طلبك في الطريق إليك", `الطلب ${num} خرج للتوصيل الآن — جهزي نفسك للاستلام!`, order.id);
+   753→  }
+   754→
+   755→  // 3) Nour — CONFIRMED (today)
+   756→  {
+   757→    const num = orderNumber(0);
+   758→    const perfumeBase = await baseSku(perfume.id);
+   759→    const lotionBase = await baseSku(lotion.id);
+   760→    const zoneMaadi = await db.deliveryZone.findFirstOrThrow({ where: { name: { contains: "المعادي" } } });
+   761→    const order = await db.order.create({
+   762→      data: {
+   763→        orderNumber: num,
+   764→        customerId: nour.id,
+   765→        status: "CONFIRMED",
+   766→        name: "نور علي",
+   767→        phonePrimary: "01111111111",
+   768→        phoneSecondary: "01098765432",
+   769→        whatsappOn: "secondary",
+   770→        addressText: "شارع 9، المعادي",
+   771→        floor: "1",
+   772→        apartment: "4",
+   773→        zoneId: zoneMaadi.id,
+   774→        subtotal: 1610,
+   775→        discountAmount: 0,
+   776→        shippingFee: 40,
+   777→        total: 1650,
+   778→        createdAt: daysAgo(0, 5),
+   779→        updatedAt: daysAgo(0, 2),
+   780→      },
+   781→    });
+   782→    await db.orderItem.createMany({
+   783→      data: [
+   784→        {
+   785→          orderId: order.id,
+   786→          productId: perfume.id,
+   787→          productName: perfume.name,
+   788→          productImage: IMG("perfume.png"),
+   789→          skuId: perfumeBase.id,
+   790→          skuCode: perfumeBase.skuCode,
+   791→          unitPrice: 1190,
+   792→          basePrice: 1450,
+   793→          quantity: 1,
+   794→          lineTotal: 1190,
+   795→        },
+   796→        {
+   797→          orderId: order.id,
+   798→          productId: lotion.id,
+   799→          productName: lotion.name,
+   800→          productImage: IMG("lotion.png"),
+   801→          skuId: lotionBase.id,
+   802→          skuCode: lotionBase.skuCode,
+   803→          unitPrice: 420,
+   804→          basePrice: 420,
+   805→          quantity: 1,
+   806→          lineTotal: 420,
+   807→        },
+   808→      ],
+   809→    });
+   810→    await reserveStock(perfumeBase.id, 1, num, admin1.name);
+   811→    await reserveStock(lotionBase.id, 1, num, admin1.name);
+   812→    await logAction(admin1, "ORDER_CONFIRM", "Order", order.id, `تأكيد الطلب ${num} وحجز الكمية`);
+   813→    await notifyCustomer(nour.id, "ORDER_STATUS", "تم تأكيد طلبك", `تم تأكيد الطلب ${num} وسيتم التواصل معك لتأكيد تفاصيل التسليم.`, order.id);
+   814→  }
+   815→
+   816→  // 4) Mariam — PENDING_REVIEW (today)
+   817→  {
+   818→    const num = orderNumber(0);
+   819→    const mascBlack = await colorSku(mascara.id, "أسود");
+   820→    const zoneWista = await db.deliveryZone.findFirstOrThrow({ where: { name: { contains: "وسط البلد" } } });
+   821→    const order = await db.order.create({
+   822→      data: {
+   823→        orderNumber: num,
+   824→        customerId: mariam.id,
+   825→        status: "PENDING_REVIEW",
+   826→        name: "مريم حسن",
+   827→        phonePrimary: "01222222222",
+   828→        phoneSecondary: "01011223344",
+   829→        whatsappOn: "primary",
+   830→        addressText: "شارع طلعت حرب، وسط البلد",
+   831→        floor: "5",
+   832→        apartment: "22",
+   833→        zoneId: zoneWista.id,
+   834→        subtotal: 840,
+   835→        discountAmount: 0,
+   836→        shippingFee: 30,
+   837→        total: 870,
+   838→        createdAt: daysAgo(0, 1),
+   839→        updatedAt: daysAgo(0, 1),
+   840→      },
+   841→    });
+   842→    await db.orderItem.create({
+   843→      data: {
+   844→        orderId: order.id,
+   845→        productId: mascara.id,
+   846→        productName: mascara.name,
+   847→        productImage: IMG("mascara.png"),
+   848→        skuId: mascBlack.id,
+   849→        skuCode: mascBlack.skuCode,
+   850→        colorName: "أسود",
+   851→        colorHex: "#1A1A1A",
+   852→        unitPrice: 420,
+   853→        basePrice: 420,
+   854→        quantity: 2,
+   855→        lineTotal: 840,
+   856→      },
+   857→    });
+   858→    await notifyAdmins("NEW_ORDER", "طلب جديد بانتظار المراجعة", `الطلب ${num} من مريم حسن بقيمة 870 ج.م`, order.id);
+   859→    await notifyCustomer(mariam.id, "ORDER_STATUS", "استلمنا طلبك", `الطلب ${num} قيد المراجعة الآن وسنوافيك بالقرار قريبًا.`, order.id);
+   860→  }
+   861→
+   862→  // 5) Nour — REJECTED (2 days ago)
+   863→  {
+   864→    const num = orderNumber(2);
+   865→    const paletteBase = await baseSku(palette.id);
+   866→    const zoneOctober = await db.deliveryZone.findFirstOrThrow({ where: { name: { contains: "6 أكتوبر" } } });
+   867→    const order = await db.order.create({
+   868→      data: {
+   869→        orderNumber: num,
+   870→        customerId: nour.id,
+   871→        status: "REJECTED",
+   872→        rejectionReason: "تعذر التواصل مع العميل على الرقمين لتأكيد الطلب",
+   873→        name: "نور علي",
+   874→        phonePrimary: "01111111111",
+   875→        phoneSecondary: "01098765432",
+   876→        whatsappOn: "primary",
+   877→        addressText: "الحصري، 6 أكتوبر",
+   878→        floor: "2",
+   879→        apartment: "7",
+   880→        zoneId: zoneOctober.id,
+   881→        subtotal: 840,
+   882→        discountAmount: 0,
+   883→        shippingFee: 50,
+   884→        total: 890,
+   885→        createdAt: daysAgo(2, 1),
+   886→        updatedAt: daysAgo(1, 12),
+   887→      },
+   888→    });
+   889→    await db.orderItem.create({
+   890→      data: {
+   891→        orderId: order.id,
+   892→        productId: palette.id,
+   893→        productName: palette.name,
+   894→        productImage: IMG("palette.png"),
+   895→        skuId: paletteBase.id,
+   896→        skuCode: paletteBase.skuCode,
+   897→        unitPrice: 840,
+   898→        basePrice: 990,
+   899→        quantity: 1,
+   900→        lineTotal: 840,
+   901→      },
+   902→    });
+   903→    await logAction(admin2, "ORDER_REJECT", "Order", order.id, `رفض الطلب ${num} — تعذر التواصل مع العميل`);
+   904→    await notifyCustomer(nour.id, "ORDER_STATUS", "تم رفض طلبك", `نعتذر، تم رفض الطلب ${num}. السبب: تعذر التواصل معك على الرقمين لتأكيد الطلب. تواصلي معنا عبر واتساب للمساعدة.`, order.id);
+   905→  }
+   906→
+   907→  // 6) Mariam — CANCELLED after confirmation (3 days ago)
+   908→  {
+   909→    const num = orderNumber(3);
+   910→    const arganBase = await baseSku(arganOil.id);
+   911→    const tonerBase = await baseSku(toner.id);
+   912→    const zoneHaram = await db.deliveryZone.findFirstOrThrow({ where: { name: { contains: "الهرم" } } });
+   913→    const order = await db.order.create({
+   914→      data: {
+   915→        orderNumber: num,
+   916→        customerId: mariam.id,
+   917→        status: "CANCELLED",
+   918→        cancellationReason: "العميلة ألغت الطلب قبل الشحن — تم تحميل تكلفة الشحن وفق السياسة",
+   919→        name: "مريم حسن",
+   920→        phonePrimary: "01222222222",
+   921→        phoneSecondary: "01011223344",
+   922→        whatsappOn: "secondary",
+   923→        addressText: "شارع الهرم، فيصل",
+   924→        floor: "4",
+   925→        apartment: "9",
+   926→        zoneId: zoneHaram.id,
+   927→        subtotal: 870,
+   928→        discountAmount: 0,
+   929→        shippingFee: 45,
+   930→        total: 915,
+   931→        createdAt: daysAgo(3, 5),
+   932→        updatedAt: daysAgo(2, 10),
+   933→      },
+   934→    });
+   935→    await db.orderItem.createMany({
+   936→      data: [
+   937→        {
+   938→          orderId: order.id,
+   939→          productId: arganOil.id,
+   940→          productName: arganOil.name,
+   941→          productImage: IMG("arganoil.png"),
+   942→          skuId: arganBase.id,
+   943→          skuCode: arganBase.skuCode,
+   944→          unitPrice: 550,
+   945→          basePrice: 550,
+   946→          quantity: 1,
+   947→          lineTotal: 550,
+   948→        },
+   949→        {
+   950→          orderId: order.id,
+   951→          productId: toner.id,
+   952→          productName: toner.name,
+   953→          productImage: IMG("toner.png"),
+   954→          skuId: tonerBase.id,
+   955→          skuCode: tonerBase.skuCode,
+   956→          unitPrice: 320,
+   957→          basePrice: 320,
+   958→          quantity: 1,
+   959→          lineTotal: 320,
+   960→        },
+   961→      ],
+   962→    });
+   963→    await reserveStock(arganBase.id, 1, num, admin1.name);
+   964→    await reserveStock(tonerBase.id, 1, num, admin1.name);
+   965→    await releaseStock(arganBase.id, 1, num, admin1.name);
+   966→    await releaseStock(tonerBase.id, 1, num, admin1.name);
+   967→    await logAction(admin1, "ORDER_CANCEL", "Order", order.id, `إلغاء الطلب ${num} بعد التأكيد وتحرير الكمية المحجوزة`);
+   968→    await notifyCustomer(mariam.id, "ORDER_STATUS", "تم إلغاء طلبك", `تم إلغاء الطلب ${num} كما طلبت.`, order.id);
+   969→  }
+   970→  console.log("✓ Orders + inventory transactions");
+   971→
+   972→  // ─── Low stock notifications (current state) ───
+   973→  const lowSkus = await db.sku.findMany({
+   974→    where: { AND: [{ availableQty: { lte: 5 } }, { availableQty: { gt: 0 } }] },
+   975→    include: { product: true },
+   976→  });
+   977→  for (const sku of lowSkus) {
+   978→    if (sku.availableQty <= sku.lowStockThreshold) {
+   979→      await notifyAdmins(
+   980→        "LOW_STOCK",
+   981→        "تنبيه مخزون منخفض",
+   982→        `${sku.product.name}${sku.colorName ? ` — ${sku.colorName}` : ""} (${sku.skuCode}): متبقي ${sku.availableQty} قطعة فقط`
+   983→      );
+   984→    }
+   985→  }
+   986→  const outSkus = await db.sku.findMany({
+   987→    where: { availableQty: 0 },
+   988→    include: { product: true },
+   989→  });
+   990→  for (const sku of outSkus) {
+   991→    await notifyAdmins(
+   992→      "OUT_OF_STOCK",
+   993→      "نفاد مخزون SKU",
+   994→      `${sku.product.name}${sku.colorName ? ` — ${sku.colorName}` : ""} (${sku.skuCode}) نفد من المخزون`
+   995→    );
+   996→  }
+   997→  console.log("✓ Notifications");
+   998→
+   999→  console.log("🎉 Seed complete!");
+  1000→  console.log("   Admins: admin1 / admin2 — كلمة المرور: brilliant2026");
+  1001→  console.log("   عميلة تجريبية: 01000000000 — كلمة المرور: 123456");
+  1002→  console.log("   أكواد خصم: WELCOME10 (10%) | GOLD20 (20%)");
+  1003→}
+  1004→
+  1005→main()
+  1006→  .catch((e) => {
+  1007→    console.error(e);
+  1008→    process.exit(1);
+  1009→  })
+  1010→  .finally(() => db.$disconnect());
+  1011→
