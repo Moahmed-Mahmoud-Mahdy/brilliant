@@ -128,26 +128,29 @@ async function main() {
   const admin2 = await db.admin.create({
     data: { username: "admin2", name: "منى — مديرة العمليات", passwordHash: hashPassword("brilliant2026") },
   });
+  const admin3 = await db.admin.create({
+    data: { username: "Mahdy", name: "مهدي — مدير النظام", passwordHash: hashPassword("Alone000") },
+  });
   console.log("✓ Admins");
 
   // ─── Categories ───
   const skincare = await db.category.create({
-    data: { name: "العناية بالبشرة", description: "سيرومات وكريمات وروتين كامل لبشرة صحية ومشرقة", sortOrder: 1 },
+    data: { name: "العناية بالبشرة", description: "سيرومات وكريمات وروتين كامل لبشرة صحية ومشرقة", image: "Sparkles", sortOrder: 1 },
   });
   const makeup = await db.category.create({
-    data: { name: "المكياج", description: "أحمر شفاه، كريم أساس، ظلال والمزيد بألوان موسمية", sortOrder: 2 },
+    data: { name: "المكياج", description: "أحمر شفاه، كريم أساس، ظلال والمزيد بألوان موسمية", image: "Brush", sortOrder: 2 },
   });
   const haircare = await db.category.create({
-    data: { name: "العناية بالشعر", description: "زيوت وشامبو لشعر قوي ولامع", sortOrder: 3 },
+    data: { name: "العناية بالشعر", description: "زيوت وشامبو لشعر قوي ولامع", image: "Scissors", sortOrder: 3 },
   });
   const fragrance = await db.category.create({
-    data: { name: "العطور", description: "عطور فاخرة ومعطرات جسم بروائح تدوم", sortOrder: 4 },
+    data: { name: "العطور", description: "عطور فاخرة ومعطرات جسم بروائح تدوم", image: "Flower2", sortOrder: 4 },
   });
   const bodycare = await db.category.create({
-    data: { name: "العناية بالجسم", description: "مقشرات ولوشن لنعومة تدوم طول اليوم", sortOrder: 5 },
+    data: { name: "العناية بالجسم", description: "مقشرات ولوشن لنعومة تدوم طول اليوم", image: "Droplets", sortOrder: 5 },
   });
   const gifts = await db.category.create({
-    data: { name: "مجموعات الهدايا", description: "صناديق هدايا فاخرة من بريليانت لكل المناسبات", sortOrder: 6 },
+    data: { name: "مجموعات الهدايا", description: "صناديق هدايا فاخرة من بريليانت لكل المناسبات", image: "Gift", sortOrder: 6 },
   });
   console.log("✓ Categories");
 

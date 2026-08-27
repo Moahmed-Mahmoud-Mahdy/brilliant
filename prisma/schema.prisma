@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Admin users (2 admins, identical full-access permissions) ───
+// ─── Admin users (3 admins, identical full-access permissions) ───
 model Admin {
   id           String   @id @default(cuid())
   username     String   @unique

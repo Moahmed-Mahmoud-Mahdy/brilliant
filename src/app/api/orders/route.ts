@@ -93,9 +93,9 @@ export const POST = route(async (request: Request) => {
   if (phoneSecondary && !EGYPT_PHONE_RE.test(phoneSecondary)) {
     throw new ApiError(400, "رقم الهاتف الثانوي غير صحيح");
   }
-  const whatsappOn = body?.whatsappOn;
-  if (whatsappOn !== "primary" && whatsappOn !== "secondary" && whatsappOn !== "both") {
-    throw new ApiError(400, "اختر رقم الواتساب المفضل للتواصل");
+  let whatsappOn = typeof body?.whatsappOn === "string" ? body.whatsappOn : "primary";
+  if (!phoneSecondary || (whatsappOn !== "primary" && whatsappOn !== "secondary" && whatsappOn !== "both")) {
+    whatsappOn = "primary";
   }
   const addressText = requireString(body?.addressText, "العنوان مطلوب");
   const floor = requireString(body?.floor, "الطابق مطلوب");

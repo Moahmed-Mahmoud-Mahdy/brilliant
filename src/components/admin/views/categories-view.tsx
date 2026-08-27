@@ -6,6 +6,7 @@ import { Boxes, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { CategoryDTO } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { CategoryIcon, CATEGORY_ICONS_LIST } from "@/components/category-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,10 +51,16 @@ type AdminCategory = CategoryDTO & { isActive: boolean };
 interface CategoryForm {
   name: string;
   description: string;
+  image: string;
   isActive: boolean;
 }
 
-const emptyForm: CategoryForm = { name: "", description: "", isActive: true };
+const emptyForm: CategoryForm = {
+  name: "",
+  description: "",
+  image: "Sparkles",
+  isActive: true,
+};
 
 export default function CategoriesView() {
   const { toast } = useToast();
@@ -78,6 +85,7 @@ export default function CategoriesView() {
       const body = {
         name: form.name.trim(),
         description: form.description.trim() || null,
+        image: form.image || null,
         isActive: form.isActive,
       };
       if (editing) return api.admin.updateCategory(editing.id, body);
@@ -133,6 +141,7 @@ export default function CategoriesView() {
     setForm({
       name: cat.name,
       description: cat.description ?? "",
+      image: cat.image ?? "Sparkles",
       isActive: cat.isActive,
     });
     setDialogOpen(true);
@@ -195,7 +204,14 @@ export default function CategoriesView() {
               <TableBody>
                 {categories.map((cat) => (
                   <TableRow key={cat.id}>
-                    <TableCell className="font-medium">{cat.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-primary">
+                          <CategoryIcon name={cat.image} className="h-4 w-4" />
+                        </span>
+                        <span>{cat.name}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="max-w-64 truncate text-muted-foreground" title={cat.description ?? ""}>
                       {cat.description ?? "—"}
                     </TableCell>
@@ -261,7 +277,7 @@ export default function CategoriesView() {
 
       {/* Create / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-display">
               {editing ? "تعديل القسم" : "إضافة قسم جديد"}
@@ -269,7 +285,7 @@ export default function CategoriesView() {
             <DialogDescription>
               {editing
                 ? "تعديل بيانات القسم ومدى ظهوره للعملاء"
-                : "أنشئي قسمًا جديدًا لتنظيم المنتجات"}
+                : "أنشئي قسمًا جديدًا لتنظيم المنتجات واختاري الأيقونة المناسبة"}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-4">
@@ -283,16 +299,44 @@ export default function CategoriesView() {
                 required
               />
             </div>
+
+            {/* Icon Selector */}
+            <div className="space-y-2">
+              <Label>أيقونة القسم</Label>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 rounded-xl border border-border bg-accent/30 p-2.5 max-h-52 overflow-y-auto scrollbar-thin">
+                {CATEGORY_ICONS_LIST.map(({ key, label, Icon }) => {
+                  const isSelected = form.image === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={label}
+                      onClick={() => setForm({ ...form, image: key })}
+                      className={`flex flex-col items-center justify-center gap-1 rounded-lg p-2 transition-all ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground shadow-sm ring-2 ring-primary"
+                          : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground border border-border/50"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      <span className="text-[10px] truncate max-w-full text-center">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="cat-desc">الوصف</Label>
               <Textarea
                 id="cat-desc"
-                rows={3}
+                rows={2}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="وصف مختصر يظهر مع القسم (اختياري)"
               />
             </div>
+
             <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
               <div>
                 <p className="text-sm font-medium">مفعّل للعملاء</p>

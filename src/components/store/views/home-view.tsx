@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
+import { CategoryIcon } from "@/components/category-icon";
 import ProductCard from "./product-card";
 
 const CATEGORY_ICONS = [Sparkles, Brush, Scissors, Flower2, Droplets, Gift];
@@ -186,7 +187,6 @@ function CategoriesRow() {
   return (
     <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 scrollbar-thin">
       {categories.map((cat, i) => {
-        const Icon = CATEGORY_ICONS[i % CATEGORY_ICONS.length];
         return (
           <motion.div
             key={cat.id}
@@ -201,7 +201,7 @@ function CategoriesRow() {
               className="flex flex-col items-center gap-2"
             >
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary transition-transform duration-300 group-hover:scale-110">
-                <Icon className="h-6 w-6" />
+                <CategoryIcon name={cat.image} className="h-6 w-6" />
               </span>
               <span className="text-sm font-semibold">{cat.name}</span>
               <span className="text-[11px] text-muted-foreground">{cat.productCount} منتج</span>

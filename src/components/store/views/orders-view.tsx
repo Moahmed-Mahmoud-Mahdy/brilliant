@@ -317,7 +317,7 @@ function OrderCard({ order, index }: { order: OrderDTO; index: number }) {
                     <p>{order.name}</p>
                     <p className="flex items-center gap-1.5" dir="ltr">
                       <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                      {order.phonePrimary} / {order.phoneSecondary}
+                      {order.phoneSecondary ? `${order.phonePrimary} / ${order.phoneSecondary}` : order.phonePrimary}
                     </p>
                     <p className="text-xs text-muted-foreground">{WHATSAPP_LABELS[order.whatsappOn]}</p>
                     <Separator className="my-1" />

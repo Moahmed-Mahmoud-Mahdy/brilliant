@@ -119,11 +119,18 @@ export default function CheckoutView() {
   const shippingFee = zone?.shippingFee ?? 0;
   const total = Math.max(0, subtotal - discountAmount + shippingFee);
 
+  // Auto-reset whatsapp option if secondary phone is cleared
+  useEffect(() => {
+    if (!phoneSecondary.trim() && whatsappOn !== "primary") {
+      setWhatsappOn("primary");
+    }
+  }, [phoneSecondary, whatsappOn]);
+
   // ── Validation ──
   const stepValid = useMemo(
     () => [
       name.trim().length >= 2 && PHONE_RE.test(phonePrimary),
-      PHONE_RE.test(phoneSecondary) && phoneSecondary !== phonePrimary,
+      phoneSecondary.trim() === "" || (PHONE_RE.test(phoneSecondary) && phoneSecondary !== phonePrimary),
       addressText.trim().length >= 10,
       floor.trim().length > 0 && apartment.trim().length > 0 && zoneId !== "",
       true,
@@ -450,16 +457,19 @@ export default function CheckoutView() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="co-phone2">رقم هاتف إضافي *</Label>
+                  <Label htmlFor="co-phone2">رقم هاتف إضافي (اختياري)</Label>
                   <Input
                     id="co-phone2"
                     dir="ltr"
                     inputMode="numeric"
                     value={phoneSecondary}
                     onChange={(e) => setPhoneSecondary(e.target.value.replace(/[^0-9]/g, "").slice(0, 11))}
-                    placeholder="01xxxxxxxxx"
+                    placeholder="01xxxxxxxxx (اختياري)"
                     className={`text-right ${phoneSecondary.length === 11 && !PHONE_RE.test(phoneSecondary) ? "ring-1 ring-destructive" : ""}`}
                   />
+                  {phoneSecondary.length > 0 && phoneSecondary.length < 11 && (
+                    <p className="text-xs text-muted-foreground">أدخلي 11 رقمًا أو اتركي الحقل فارغًا</p>
+                  )}
                   {phoneSecondary.length === 11 && !PHONE_RE.test(phoneSecondary) && (
                     <p className="text-xs text-destructive">{PHONE_ERROR}</p>
                   )}
@@ -480,19 +490,19 @@ export default function CheckoutView() {
                     className="gap-2"
                   >
                     {[
-                      { value: "primary", label: "الهاتف الأساسي على واتساب", phone: phonePrimary },
-                      { value: "secondary", label: "الهاتف الثانوي على واتساب", phone: phoneSecondary },
-                      { value: "both", label: "كلاهما", phone: `${phonePrimary} / ${phoneSecondary}` },
+                      { value: "primary", label: "الهاتف الأساسي على واتساب", phone: phonePrimary, disabled: false },
+                      { value: "secondary", label: "الهاتف الثانوي على واتساب", phone: phoneSecondary || "يتطلب هاتف إضافي", disabled: !phoneSecondary.trim() },
+                      { value: "both", label: "كلاهما", phone: phoneSecondary.trim() ? `${phonePrimary} / ${phoneSecondary}` : "يتطلب هاتف إضافي", disabled: !phoneSecondary.trim() },
                     ].map((opt) => (
                       <Label
                         key={opt.value}
                         className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                          whatsappOn === opt.value
+                          opt.disabled ? "opacity-50 cursor-not-allowed border-border" : whatsappOn === opt.value
                             ? "border-primary bg-accent/60"
                             : "border-border hover:bg-muted/50"
                         }`}
                       >
-                        <RadioGroupItem value={opt.value} />
+                        <RadioGroupItem value={opt.value} disabled={opt.disabled} />
                         <MessageCircle className="h-4 w-4 text-emerald-600" />
                         <span className="flex-1 text-sm font-medium">{opt.label}</span>
                         {opt.phone && (
@@ -700,7 +710,7 @@ export default function CheckoutView() {
                     <p>
                       <span className="text-muted-foreground">الهواتف: </span>
                       <span dir="ltr">
-                        {phonePrimary} / {phoneSecondary}
+                        {phoneSecondary.trim() ? `${phonePrimary} / ${phoneSecondary}` : phonePrimary}
                       </span>
                       <Badge variant="outline" className="ms-2 gap-1 border-emerald-600/40 text-emerald-700 dark:text-emerald-400">
                         <Smartphone className="h-3 w-3" />
