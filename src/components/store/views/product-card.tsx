@@ -1,8 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { ShoppingBag, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ToastAction } from "@/components/ui/toast";
+import { useToast } from "@/hooks/use-toast";
+import { useCartStore } from "@/lib/store";
 import { formatPrice } from "@/lib/constants";
 import { BrandLogo } from "@/components/brand-logo";
 import type { ProductListDTO } from "@/lib/types";
@@ -14,7 +21,53 @@ export default function ProductCard({
   product: ProductListDTO;
   index?: number;
 }) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const addItem = useCartStore((s) => s.addItem);
+  const [added, setAdded] = useState(false);
+
   const price = product.salePrice ?? product.price;
+
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (product.isOut) return;
+
+    // Pick first available SKU (color variant or base SKU)
+    const targetSku = product.colors.find((c) => !c.isOut) ?? product.colors[0];
+    if (!targetSku) return;
+
+    const colorName = product.hasColors && targetSku.name ? targetSku.name : null;
+    const colorHex = product.hasColors && targetSku.hex ? targetSku.hex : null;
+
+    addItem({
+      skuId: targetSku.skuId,
+      productId: product.id,
+      name: product.name,
+      image: product.primaryImage,
+      colorName,
+      colorHex,
+      unitPrice: price,
+      basePrice: product.price,
+      quantity: 1,
+      maxQuantity: targetSku.available > 0 ? targetSku.available : 99,
+    });
+
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1800);
+
+    toast({
+      title: "تمت الإضافة إلى السلة ✓",
+      description: `${product.name}${colorName ? ` — ${colorName}` : ""}`,
+      action: (
+        <ToastAction altText="الانتقال للسلة" onClick={() => router.push("/cart")}>
+          الانتقال للسلة
+        </ToastAction>
+      ),
+      duration: 4000,
+    });
+  };
 
   return (
     <motion.div
@@ -57,6 +110,19 @@ export default function ProductCard({
               </span>
             </div>
           )}
+
+          {!product.isOut && (
+            <button
+              onClick={handleAddToCart}
+              aria-label="إضافة سريعة للسلة"
+              title="إضافة سريعة للسلة"
+              className={`absolute bottom-2.5 left-2.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/90 text-foreground shadow-md backdrop-blur-sm transition-all hover:scale-110 hover:bg-primary hover:text-primary-foreground ${
+                added ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""
+              }`}
+            >
+              {added ? <Check className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
+            </button>
+          )}
         </div>
 
         {/* Info */}
@@ -98,8 +164,33 @@ export default function ProductCard({
               )}
             </div>
           )}
+
+          <Button
+            size="sm"
+            variant={product.isOut ? "secondary" : added ? "outline" : "default"}
+            disabled={product.isOut}
+            onClick={handleAddToCart}
+            className={`mt-2.5 w-full gap-1.5 text-xs font-semibold shadow-xs transition-all ${
+              added ? "border-emerald-500 text-emerald-600 dark:text-emerald-400" : ""
+            }`}
+          >
+            {added ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                تمت الإضافة
+              </>
+            ) : product.isOut ? (
+              "غير متوفر"
+            ) : (
+              <>
+                <ShoppingBag className="h-3.5 w-3.5" />
+                إضافة للسلة
+              </>
+            )}
+          </Button>
         </div>
       </Link>
     </motion.div>
   );
 }
+
