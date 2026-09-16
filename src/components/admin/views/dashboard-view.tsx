@@ -101,24 +101,27 @@ function StatCard({
         onClick ? "cursor-pointer hover:border-primary/50 hover:shadow-md" : ""
       }`}
     >
-      <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground sm:text-sm">
+      <CardContent className="flex items-start justify-between gap-3 overflow-hidden p-3.5 sm:p-5">
+        <div className="min-w-0 flex-1">
+          <p
+            className="line-clamp-2 min-h-[2.25rem] text-xs font-medium leading-snug text-muted-foreground break-words sm:text-sm"
+            title={title}
+          >
             {title}
           </p>
-          <p className="font-display mt-2 truncate text-xl font-bold sm:text-2xl">
+          <p className="font-display mt-1.5 truncate text-lg font-bold whitespace-nowrap sm:text-2xl">
             {value}
           </p>
           {sub && (
-            <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
+            <p className="mt-1 truncate text-[11px] text-muted-foreground sm:text-xs" title={sub}>
               {sub}
             </p>
           )}
         </div>
         <span
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${iconClassName}`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${iconClassName}`}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </span>
       </CardContent>
     </Card>
@@ -152,30 +155,32 @@ function StatCard({
 // ─── Low stock / OOS row ───
 function StockRow({ sku }: { sku: SkuRowDTO }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/50">
+    <div className="flex items-center gap-2.5 overflow-hidden rounded-lg px-2 py-2 transition-colors hover:bg-muted/50">
       <span
-        className="h-5 w-5 shrink-0 rounded-full border border-border shadow-inner"
+        className="h-4 w-4 shrink-0 rounded-full border border-border shadow-inner sm:h-5 sm:w-5"
         style={{ backgroundColor: sku.colorHex ?? "#ccc" }}
         title={sku.colorName ?? ""}
       />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{sku.productName}</p>
-        <p className="truncate text-[11px] text-muted-foreground">
+        <p className="truncate text-xs font-medium sm:text-sm" title={sku.productName}>
+          {sku.productName}
+        </p>
+        <p className="truncate text-[10px] text-muted-foreground sm:text-[11px]">
           <span className="font-mono" dir="ltr">
             {sku.skuCode}
           </span>
           {sku.colorName ? ` — ${sku.colorName}` : ""}
         </p>
       </div>
-      <span className="text-xs text-muted-foreground">
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
         متاح: <span className="font-bold">{sku.available}</span>
       </span>
       {sku.isOut ? (
-        <Badge className="border-destructive/40 bg-destructive/15 text-destructive">
+        <Badge className="shrink-0 whitespace-nowrap border-destructive/40 bg-destructive/15 text-destructive">
           نفد
         </Badge>
       ) : (
-        <Badge className="border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-400">
+        <Badge className="shrink-0 whitespace-nowrap border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-400">
           منخفض
         </Badge>
       )}
@@ -326,9 +331,9 @@ export default function DashboardView() {
       {/* Chart + low stock */}
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Orders by status chart */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 overflow-hidden">
           <CardHeader className="pb-2">
-            <CardTitle className="font-display text-base font-bold sm:text-lg">
+            <CardTitle className="font-display truncate text-base font-bold sm:text-lg">
               الطلبات حسب الحالة
             </CardTitle>
           </CardHeader>
@@ -387,12 +392,12 @@ export default function DashboardView() {
         </Card>
 
         {/* Low stock / OOS */}
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="font-display text-base font-bold sm:text-lg">
+            <CardTitle className="font-display truncate text-base font-bold sm:text-lg">
               تنبيهات المخزون
             </CardTitle>
-            <Badge variant="outline" className="gold-border-card">
+            <Badge variant="outline" className="gold-border-card shrink-0 whitespace-nowrap">
               {lowStockSkus.length} صنف
             </Badge>
           </CardHeader>
@@ -421,11 +426,11 @@ export default function DashboardView() {
                 )}
                 <Button
                   onClick={() => router.push("/admin/inventory")}
-                  className="mt-3 w-full"
+                  className="mt-3 w-full gap-1"
                   variant="outline"
                 >
-                  إدارة المخزون
-                  <ChevronLeft className="h-4 w-4" />
+                  <span className="truncate">إدارة المخزون</span>
+                  <ChevronLeft className="h-4 w-4 shrink-0" />
                 </Button>
               </>
             )}
@@ -434,16 +439,16 @@ export default function DashboardView() {
       </div>
 
       {/* Recent orders */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="font-display text-base font-bold sm:text-lg">
+          <CardTitle className="font-display truncate text-base font-bold sm:text-lg">
             أحدث الطلبات
           </CardTitle>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push("/admin/orders")}
-            className="text-primary"
+            className="shrink-0 text-primary"
           >
             عرض الكل
             <ChevronLeft className="h-4 w-4" />
@@ -459,11 +464,11 @@ export default function DashboardView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>رقم الطلب</TableHead>
-                    <TableHead>العميل</TableHead>
-                    <TableHead>الإجمالي</TableHead>
-                    <TableHead>الحالة</TableHead>
-                    <TableHead>التاريخ</TableHead>
+                    <TableHead className="whitespace-nowrap">رقم الطلب</TableHead>
+                    <TableHead className="whitespace-nowrap">العميل</TableHead>
+                    <TableHead className="whitespace-nowrap">الإجمالي</TableHead>
+                    <TableHead className="whitespace-nowrap">الحالة</TableHead>
+                    <TableHead className="whitespace-nowrap">التاريخ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -473,19 +478,22 @@ export default function DashboardView() {
                       className="cursor-pointer"
                       onClick={() => router.push("/admin/orders")}
                     >
-                      <TableCell className="font-mono text-xs font-bold text-primary sm:text-sm">
+                      <TableCell className="whitespace-nowrap font-mono text-xs font-bold text-primary sm:text-sm">
                         {order.orderNumber}
                       </TableCell>
-                      <TableCell className="max-w-40 truncate font-medium">
+                      <TableCell
+                        className="max-w-[130px] truncate font-medium sm:max-w-[200px]"
+                        title={order.customerName}
+                      >
                         {order.customerName}
                       </TableCell>
-                      <TableCell className="font-semibold">
+                      <TableCell className="whitespace-nowrap font-semibold">
                         {formatPrice(order.total)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <StatusBadge status={order.status} />
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                         {new Date(order.createdAt).toLocaleDateString("ar-EG")}
                       </TableCell>
                     </TableRow>
@@ -499,3 +507,4 @@ export default function DashboardView() {
     </div>
   );
 }
+
