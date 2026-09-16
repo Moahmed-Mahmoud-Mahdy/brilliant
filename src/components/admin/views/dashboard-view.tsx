@@ -101,25 +101,25 @@ function StatCard({
         onClick ? "cursor-pointer hover:border-primary/50 hover:shadow-md" : ""
       }`}
     >
-      <CardContent className="flex items-start justify-between gap-3 overflow-hidden p-3.5 sm:p-5">
+      <CardContent className="flex items-start justify-between gap-2 overflow-hidden p-3 sm:p-5">
         <div className="min-w-0 flex-1">
           <p
-            className="line-clamp-2 min-h-[2.25rem] text-xs font-medium leading-snug text-muted-foreground break-words sm:text-sm"
+            className="line-clamp-2 min-h-[2rem] text-[11px] font-medium leading-tight text-muted-foreground break-words sm:min-h-[2.25rem] sm:text-sm"
             title={title}
           >
             {title}
           </p>
-          <p className="font-display mt-1.5 truncate text-lg font-bold whitespace-nowrap sm:text-2xl">
+          <p className="font-display mt-1 truncate text-base font-bold whitespace-nowrap sm:mt-1.5 sm:text-2xl">
             {value}
           </p>
           {sub && (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground sm:text-xs" title={sub}>
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground sm:mt-1 sm:text-xs" title={sub}>
               {sub}
             </p>
           )}
         </div>
         <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${iconClassName}`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-11 sm:w-11 sm:rounded-xl ${iconClassName}`}
         >
           <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </span>
@@ -301,7 +301,7 @@ export default function DashboardView() {
       </div>
 
       {/* Secondary stats */}
-      <div className="grid grid-cols-3 gap-3 lg:gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <StatCard
           title="عدد المنتجات"
           value={String(dashboard?.totalProducts ?? 0)}
