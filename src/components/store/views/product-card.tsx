@@ -127,30 +127,42 @@ export default function ProductCard({
 
         {/* Info */}
         <div className="flex flex-1 flex-col gap-1 p-3">
-          <p className="line-clamp-1 text-sm font-medium">{product.name}</p>
+          <p
+            className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-tight break-words"
+            title={product.name}
+          >
+            {product.name}
+          </p>
           {product.categoryName && (
-            <p className="text-[11px] text-muted-foreground">{product.categoryName}</p>
+            <p className="line-clamp-1 truncate text-[11px] text-muted-foreground">
+              {product.categoryName}
+            </p>
           )}
 
           <div className="mt-auto flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-1">
             <span
-              className={`text-sm font-bold ${product.salePrice ? "text-primary" : "text-foreground"}`}
+              className={`whitespace-nowrap text-sm font-bold ${
+                product.salePrice ? "text-primary" : "text-foreground"
+              }`}
             >
               {formatPrice(price)}
             </span>
             {product.salePrice && product.salePrice < product.price && (
-              <span className="text-xs text-muted-foreground line-through">
+              <span className="whitespace-nowrap text-xs text-muted-foreground line-through">
                 {formatPrice(product.price)}
               </span>
             )}
           </div>
 
           {product.hasColors && product.colors.length > 0 && (
-            <div className="flex items-center gap-1.5 pt-1" aria-label="الألوان المتاحة">
+            <div
+              className="flex flex-wrap items-center gap-1.5 pt-1 overflow-hidden"
+              aria-label="الألوان المتاحة"
+            >
               {product.colors.slice(0, 5).map((c) => (
                 <span
                   key={c.skuId}
-                  className={`h-3.5 w-3.5 rounded-full ring-1 ring-border ${
+                  className={`h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-border ${
                     c.isOut ? "opacity-40" : ""
                   }`}
                   style={{ backgroundColor: c.hex || "#e2ddd5" }}
@@ -158,7 +170,7 @@ export default function ProductCard({
                 />
               ))}
               {product.colors.length > 5 && (
-                <span className="text-[10px] leading-none text-muted-foreground">
+                <span className="text-[10px] leading-none text-muted-foreground whitespace-nowrap">
                   +{product.colors.length - 5}
                 </span>
               )}
@@ -176,15 +188,15 @@ export default function ProductCard({
           >
             {added ? (
               <>
-                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                تمت الإضافة
+                <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span className="truncate">تمت الإضافة</span>
               </>
             ) : product.isOut ? (
-              "غير متوفر"
+              <span className="truncate">غير متوفر</span>
             ) : (
               <>
-                <ShoppingBag className="h-3.5 w-3.5" />
-                إضافة للسلة
+                <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">إضافة للسلة</span>
               </>
             )}
           </Button>
@@ -193,4 +205,5 @@ export default function ProductCard({
     </motion.div>
   );
 }
+
 
