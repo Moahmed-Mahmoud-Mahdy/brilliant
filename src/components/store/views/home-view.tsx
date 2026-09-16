@@ -194,17 +194,22 @@ function CategoriesRow() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: Math.min(i * 0.06, 0.4) }}
             whileHover={{ y: -4 }}
-            className="gold-border-card group flex min-w-[128px] flex-col items-center gap-2 rounded-2xl bg-card p-4 transition-shadow hover:shadow-md"
+            className="gold-border-card group flex w-[130px] shrink-0 flex-col items-center gap-2 overflow-hidden rounded-2xl bg-card p-3.5 transition-shadow hover:shadow-md"
           >
             <Link
               href={`/products?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}`}
-              className="flex flex-col items-center gap-2"
+              className="flex w-full flex-col items-center gap-2 text-center"
+              title={cat.name}
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary transition-transform duration-300 group-hover:scale-110">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-primary transition-transform duration-300 group-hover:scale-110">
                 <CategoryIcon name={cat.image} className="h-6 w-6" />
               </span>
-              <span className="text-sm font-semibold">{cat.name}</span>
-              <span className="text-[11px] text-muted-foreground">{cat.productCount} منتج</span>
+              <span className="line-clamp-2 min-h-[2.25rem] w-full text-center text-xs font-semibold leading-tight break-words">
+                {cat.name}
+              </span>
+              <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                {cat.productCount} منتج
+              </span>
             </Link>
           </motion.div>
         );
@@ -212,6 +217,7 @@ function CategoriesRow() {
     </div>
   );
 }
+
 
 // ─── Featured products ───
 
